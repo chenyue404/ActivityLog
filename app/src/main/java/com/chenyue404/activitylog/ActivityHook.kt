@@ -24,9 +24,8 @@ class ActivityHook : IXposedHookLoadPackage {
         }
 
         when (Build.VERSION.SDK_INT) {
-            Build.VERSION_CODES.O_MR1 -> {
-                hookO_MR1(classLoader)
-            }
+            Build.VERSION_CODES.O_MR1 -> hook27(classLoader)
+            Build.VERSION_CODES.R -> hook30(classLoader)
             else -> log("暂不支持这个版本的Android")
         }
     }
@@ -35,7 +34,7 @@ class ActivityHook : IXposedHookLoadPackage {
         XposedBridge.log("$TAG-$str")
     }
 
-    private fun hookO_MR1(classLoader: ClassLoader) {
+    private fun hook27(classLoader: ClassLoader) {
         /**
          * int startActivityMayWait(IApplicationThread caller, int callingUid,
         String callingPackage, Intent intent, String resolvedType,
@@ -76,6 +75,36 @@ class ActivityHook : IXposedHookLoadPackage {
                     val intent: Intent = param.args[3] as Intent
                     val str = intent.transToStr(callingPackage)
                     log("\n$str")
+                }
+            }
+        )
+    }
+
+
+    private fun hook30(classLoader: ClassLoader) {
+        val requestClazz =
+            XposedHelpers.findClass("com.android.server.wm.ActivityStarter\$Request", classLoader)
+        XposedHelpers.findAndHookMethod(
+            "com.android.server.wm.ActivityStarter", classLoader, "executeRequest",
+            requestClazz,
+            object : XC_MethodHook() {
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    val request = param.args[0]
+                    val callingPackage =
+                        XposedHelpers.getObjectField(request, "callingPackage") as String
+                    val safeActivityOptions =
+                        XposedHelpers.getObjectField(request, "activityOptions")
+                    var bundle: Bundle? = null
+                    safeActivityOptions?.run {
+                        val activityOptions =
+                            XposedHelpers.getObjectField(safeActivityOptions, "mOriginalOptions")
+                        activityOptions?.let {
+                            bundle = XposedHelpers.callMethod(it, "toBundle") as Bundle
+                        }
+                    }
+                    val intent =
+                        XposedHelpers.getObjectField(request, "intent") as Intent
+                    log("\n${intent.transToStr(callingPackage, bundle)}")
                 }
             }
         )
