@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ActivityLog</string>
+    <string name="xposed_description">Activity Log</string>
+</resources>
