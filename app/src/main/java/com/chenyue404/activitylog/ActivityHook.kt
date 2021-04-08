@@ -73,7 +73,8 @@ class ActivityHook : IXposedHookLoadPackage {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val callingPackage = param.args[2] as String
                     val intent: Intent = param.args[3] as Intent
-                    val str = intent.transToStr(callingPackage)
+                    val bundle: Bundle = param.args[14] as Bundle
+                    val str = intent.transToStr(callingPackage, bundle)
                     log("\n$str")
                 }
             }
