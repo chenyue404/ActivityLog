@@ -12,26 +12,27 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
 
 class ActivityHook : IXposedHookLoadPackage {
 
-    private val PACKAGE_NAME = "android"
-    private val TAG = "ActivityHook-"
+    private val packageName = "android"
+    private val tag = "ActivityHook-"
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         val packageName = lpparam.packageName
         val classLoader = lpparam.classLoader
 
-        if (packageName != PACKAGE_NAME) {
+        if (packageName != this.packageName) {
             return
         }
 
         when (Build.VERSION.SDK_INT) {
             Build.VERSION_CODES.O_MR1 -> hook27(classLoader)
+            Build.VERSION_CODES.Q,
             Build.VERSION_CODES.R -> hook30(classLoader)
             else -> log("暂不支持这个版本的Android")
         }
     }
 
     private fun log(str: String) {
-        XposedBridge.log("$TAG-$str")
+        XposedBridge.log("$tag-$str")
     }
 
     private fun hook27(classLoader: ClassLoader) {
@@ -45,30 +46,30 @@ class ActivityHook : IXposedHookLoadPackage {
         TaskRecord inTask, String reason)
          */
 
-        val IApplicationThread =
+        val iApplicationThreadClass =
             XposedHelpers.findClass("android.app.IApplicationThread", classLoader)
-        val IVoiceInteractionSession =
+        val iVoiceInteractionSessionClass =
             XposedHelpers.findClass("android.service.voice.IVoiceInteractionSession", classLoader)
-        val IVoiceInteractor =
+        val iVoiceInteractorClass =
             XposedHelpers.findClass("com.android.internal.app.IVoiceInteractor", classLoader)
-        val ProfilerInfo =
+        val profilerInfoClass =
             XposedHelpers.findClass("android.app.ProfilerInfo", classLoader)
-        val WaitResult =
+        val waitResultClass =
             XposedHelpers.findClass("android.app.WaitResult", classLoader)
-        val Configuration =
+        val configurationClass =
             XposedHelpers.findClass("android.content.res.Configuration", classLoader)
-        val TaskRecord =
+        val taskRecordClass =
             XposedHelpers.findClass("com.android.server.am.TaskRecord", classLoader)
 
         XposedHelpers.findAndHookMethod(
             "com.android.server.am.ActivityStarter", classLoader, "startActivityMayWait",
-            IApplicationThread, Int::class.java,
+            iApplicationThreadClass, Int::class.java,
             String::class.java, Intent::class.java, String::class.java,
-            IVoiceInteractionSession, IVoiceInteractor,
+            iVoiceInteractionSessionClass, iVoiceInteractorClass,
             IBinder::class.java, String::class.java, Int::class.java, Int::class.java,
-            ProfilerInfo, WaitResult,
-            Configuration, Bundle::class.java, Boolean::class.java, Int::class.java,
-            TaskRecord, String::class.java,
+            profilerInfoClass, waitResultClass,
+            configurationClass, Bundle::class.java, Boolean::class.java, Int::class.java,
+            taskRecordClass, String::class.java,
             object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val callingPackage = param.args[2] as String
@@ -83,22 +84,24 @@ class ActivityHook : IXposedHookLoadPackage {
 
 
     private fun hook30(classLoader: ClassLoader) {
-        val requestClazz =
-            XposedHelpers.findClass("com.android.server.wm.ActivityStarter\$Request", classLoader)
         XposedHelpers.findAndHookMethod(
-            "com.android.server.wm.ActivityStarter", classLoader, "executeRequest",
-            requestClazz,
+            "com.android.server.wm.ActivityStarter", classLoader, "execute",
             object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    val request = param.args[0]
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    val request = XposedHelpers.getObjectField(param.thisObject, "mRequest")
                     val callingPackage =
-                        XposedHelpers.getObjectField(request, "callingPackage") as String
+                        XposedHelpers.getObjectField(request, "callingPackage")?.let {
+                            it as String
+                        } ?: ""
                     val safeActivityOptions =
                         XposedHelpers.getObjectField(request, "activityOptions")
                     var bundle: Bundle? = null
                     safeActivityOptions?.run {
                         val activityOptions =
-                            XposedHelpers.getObjectField(safeActivityOptions, "mOriginalOptions")
+                            XposedHelpers.getObjectField(
+                                safeActivityOptions,
+                                "mOriginalOptions"
+                            )
                         activityOptions?.let {
                             bundle = XposedHelpers.callMethod(it, "toBundle") as Bundle
                         }
