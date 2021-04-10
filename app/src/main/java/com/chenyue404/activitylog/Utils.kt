@@ -5,12 +5,18 @@ import android.os.Bundle
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import java.text.SimpleDateFormat
+import java.util.*
 
 class Utils {
 }
 
+fun Long.timeToStr(): String =
+    SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.ROOT).format(this)
+
 fun Intent.transToStr(from: String = "null", bundle: Bundle? = null): String {
     val jsonObject = JsonObject().apply {
+        addProperty("time", System.currentTimeMillis().timeToStr())
         addProperty("from", from)
         addProperty("to", component?.className ?: "null")
         addProperty("action", action)

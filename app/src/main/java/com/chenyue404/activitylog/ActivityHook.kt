@@ -1,9 +1,11 @@
 package com.chenyue404.activitylog
 
 import android.app.ActivityOptions
+import android.app.AndroidAppHelper
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -22,6 +24,7 @@ class ActivityHook : IXposedHookLoadPackage {
         if (packageName != this.packageName) {
             return
         }
+        hookCheckBroadcastFromSystem(classLoader)
 
         val osVersion = Build.VERSION.SDK_INT
         log("osVersion=$osVersion")
@@ -118,7 +121,9 @@ class ActivityHook : IXposedHookLoadPackage {
                     }
                     val intent =
                         XposedHelpers.getObjectField(request, "intent") as Intent
-                    log("\n${intent.transToStr(callingPackage, bundle)}")
+                    val str = intent.transToStr(callingPackage, bundle)
+                    log("\n$str")
+                    sendBroadcast(str)
                 }
             }
         )
@@ -137,7 +142,45 @@ class ActivityHook : IXposedHookLoadPackage {
             val intent = XposedHelpers.getObjectField(activityRecord, "intent")?.let {
                 it as Intent
             } ?: return
-            log("\n${intent.transToStr(callingPackage, bundle)}")
+            val str = intent.transToStr(callingPackage, bundle)
+            log("\n$str")
+            sendBroadcast(str)
         }
+    }
+
+    private fun sendBroadcast(str: String) {
+        val context = AndroidAppHelper.currentApplication().applicationContext
+        Handler(context.mainLooper).post {
+            context.sendBroadcast(Intent().apply {
+                action = LogReceiver.action
+                putExtra(LogReceiver.extraKey, str)
+            })
+        }
+    }
+
+    /**
+     * 解除系统不能发自定义广播的限制
+     */
+    private fun hookCheckBroadcastFromSystem(classLoader: ClassLoader) {
+        val ProcessRecord =
+            XposedHelpers.findClass("com.android.server.am.ProcessRecord", classLoader)
+        XposedHelpers.findAndHookMethod(
+            "com.android.server.am.ActivityManagerService", classLoader,
+            "checkBroadcastFromSystem",
+            Intent::class.java,
+            ProcessRecord,
+            String::class.java,
+            Int::class.java,
+            Boolean::class.java,
+            List::class.java,
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    val intent: Intent = param.args[0] as Intent
+                    if (intent.action == LogReceiver.action) {
+                        param.args[4] = true
+                    }
+                }
+            }
+        )
     }
 }
