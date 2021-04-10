@@ -1,8 +1,8 @@
 package com.chenyue404.activitylog
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import java.text.SimpleDateFormat
@@ -60,5 +60,10 @@ fun Intent.transToStr(from: String = "null", bundle: Bundle? = null): String {
         }
     }
 
-    return GsonBuilder().setPrettyPrinting().create().toJson(jsonObject)
+//    return GsonBuilder().setPrettyPrinting().create().toJson(jsonObject)
+    return jsonObject.toString()
+}
+
+fun Int.dp2Px(context: Context): Int {
+    return (this * context.resources.displayMetrics.density + 0.5f).toInt()
 }

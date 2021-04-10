@@ -6,22 +6,26 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
-import de.robv.android.xposed.IXposedHookLoadPackage
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.XposedHelpers
+import de.robv.android.xposed.*
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 
 class ActivityHook : IXposedHookLoadPackage {
-
-    private val packageName = "android"
-    private val tag = "ActivityHook-"
+    companion object {
+        private const val HOOK_TARGET_PACKAGENAME = "android"
+        const val TAG = "ActivityHook-"
+        const val PREF_NAME = "main_prefs"
+        const val KEY_HOOK_SWITCH = "key_hook_switch"
+        private const val SWITCH_NULL = "null"
+        const val SWITCH_TRUE = "true"
+        const val SWITCH_FALSE = "false"
+        var hookSwitch = SWITCH_NULL
+    }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         val packageName = lpparam.packageName
         val classLoader = lpparam.classLoader
 
-        if (packageName != this.packageName) {
+        if (packageName != HOOK_TARGET_PACKAGENAME) {
             return
         }
         hookCheckBroadcastFromSystem(classLoader)
@@ -93,7 +97,7 @@ class ActivityHook : IXposedHookLoadPackage {
     }
 
     private fun log(str: String) {
-        XposedBridge.log("$tag-$str")
+        XposedBridge.log("$TAG-$str")
     }
 
     private fun hookExecute(className: String, classLoader: ClassLoader) {
@@ -101,7 +105,17 @@ class ActivityHook : IXposedHookLoadPackage {
             className, classLoader, "execute",
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
+                    log("hookExecute")
+                    if (hookSwitch == SWITCH_NULL && readHookSwitchIsFalse()) return
+
                     val request = XposedHelpers.getObjectField(param.thisObject, "mRequest")
+                    val intent = XposedHelpers.getObjectField(request, "intent") as Intent
+                    intent.component?.let {
+                        if (it.toString().contains(BuildConfig.APPLICATION_ID)
+                            && readHookSwitchIsFalse()
+                        ) return
+                    }
+                    if (hookSwitch == SWITCH_FALSE) return
                     val callingPackage =
                         XposedHelpers.getObjectField(request, "callingPackage")?.let {
                             it as String
@@ -119,8 +133,6 @@ class ActivityHook : IXposedHookLoadPackage {
                             bundle = XposedHelpers.callMethod(it, "toBundle") as Bundle
                         }
                     }
-                    val intent =
-                        XposedHelpers.getObjectField(request, "intent") as Intent
                     val str = intent.transToStr(callingPackage, bundle)
                     log("\n$str")
                     sendBroadcast(str)
@@ -132,16 +144,25 @@ class ActivityHook : IXposedHookLoadPackage {
     private fun hookStartActivityUnchecked() = object : XC_MethodHook() {
         override fun afterHookedMethod(param: MethodHookParam) {
             log("hookStartActivityUnchecked")
+            if (hookSwitch == SWITCH_NULL && readHookSwitchIsFalse()) return
+
             val activityRecord = param.args[0]
+            val intent = XposedHelpers.getObjectField(activityRecord, "intent")?.let {
+                it as Intent
+            } ?: return
+            intent.component?.let {
+                if (it.toString().contains(BuildConfig.APPLICATION_ID)
+                    && readHookSwitchIsFalse()
+                ) return
+            }
+            if (hookSwitch == SWITCH_FALSE) return
+
             val activityOptions = param.args[6]?.let { it as ActivityOptions }
             val bundle = activityOptions?.toBundle()
             val callingPackage =
                 XposedHelpers.getObjectField(activityRecord, "launchedFromPackage")?.let {
                     it as String
                 } ?: ""
-            val intent = XposedHelpers.getObjectField(activityRecord, "intent")?.let {
-                it as Intent
-            } ?: return
             val str = intent.transToStr(callingPackage, bundle)
             log("\n$str")
             sendBroadcast(str)
@@ -182,5 +203,14 @@ class ActivityHook : IXposedHookLoadPackage {
                 }
             }
         )
+    }
+
+    private fun readHookSwitchIsFalse(): Boolean {
+        val xSharedPreferences = XSharedPreferences(
+            BuildConfig.APPLICATION_ID,
+            PREF_NAME
+        )
+        hookSwitch = xSharedPreferences.getString(KEY_HOOK_SWITCH, SWITCH_TRUE) ?: SWITCH_TRUE
+        return hookSwitch == SWITCH_FALSE
     }
 }

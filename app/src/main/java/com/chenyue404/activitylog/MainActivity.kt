@@ -2,14 +2,19 @@ package com.chenyue404.activitylog
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Context
+import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.content.edit
+import androidx.core.view.setPadding
 import androidx.recyclerview.widget.RecyclerView
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
@@ -32,7 +37,7 @@ class MainActivity : Activity() {
         btStatus = findViewById(R.id.btStatus)
         btClear = findViewById(R.id.btClear)
 
-        rvList.adapter = LogListAdapter(dataList)
+        rvList.adapter = listAdapter
         logReceiver = LogReceiver {
             dataList.add(JsonParser.parseString(it).asJsonObject)
             listAdapter.notifyItemChanged(dataList.lastIndex)
@@ -47,6 +52,25 @@ class MainActivity : Activity() {
         btClear.setOnClickListener {
             dataList.clear()
             listAdapter.notifyDataSetChanged()
+        }
+        var hookStatus = getSP()?.getString(ActivityHook.KEY_HOOK_SWITCH, ActivityHook.SWITCH_TRUE)
+                ?: ActivityHook.SWITCH_TRUE == ActivityHook.SWITCH_TRUE
+        Log.e(ActivityHook.TAG, "hookStatus=$hookStatus")
+
+        if (hookStatus) btStatus.setImageResource(android.R.drawable.ic_media_pause)
+        else btStatus.setImageResource(android.R.drawable.ic_media_play)
+
+        btStatus.setOnClickListener {
+            if (hookStatus) btStatus.setImageResource(android.R.drawable.ic_media_play)
+            else btStatus.setImageResource(android.R.drawable.ic_media_pause)
+            hookStatus = !hookStatus
+            getSP()?.edit(true) {
+                putString(
+                    ActivityHook.KEY_HOOK_SWITCH,
+                    if (hookStatus) ActivityHook.SWITCH_TRUE else ActivityHook.SWITCH_FALSE
+                )
+            }
+            startActivity(Intent(this, MainActivity::class.java))
         }
     }
 
@@ -87,6 +111,7 @@ class MainActivity : Activity() {
                                     ViewGroup.LayoutParams.WRAP_CONTENT,
                                     ViewGroup.LayoutParams.WRAP_CONTENT
                                 )
+                                setPadding(10.dp2Px(it.context))
                                 text = GsonBuilder().setPrettyPrinting().create().toJson(jo)
                                 setTextIsSelectable(true)
                             }
@@ -98,5 +123,15 @@ class MainActivity : Activity() {
         }
 
         override fun getItemCount() = dataList.size
+    }
+
+    private fun getSP() = try {
+        getSharedPreferences(
+            ActivityHook.PREF_NAME,
+            Context.MODE_WORLD_READABLE
+        )
+    } catch (e: SecurityException) {
+        // The new XSharedPreferences is not enabled or module's not loading
+        null // other fallback, if any
     }
 }
