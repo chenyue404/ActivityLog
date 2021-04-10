@@ -73,7 +73,7 @@ class ActivityHook : IXposedHookLoadPackage {
                     Boolean::class.java,
                     ActivityOptions::class.java,
                     taskRecordClass,
-                    arrayOf(activityRecordClass)::class.java,
+                    "[Lcom.android.server.am.ActivityRecord;",
                     hookStartActivityUnchecked()
                 )
             }
@@ -128,8 +128,8 @@ class ActivityHook : IXposedHookLoadPackage {
         override fun afterHookedMethod(param: MethodHookParam) {
             log("hookStartActivityUnchecked")
             val activityRecord = param.args[0]
-            val activityOptions = param.args[6] as ActivityOptions
-            val bundle = activityOptions.toBundle()
+            val activityOptions = param.args[6]?.let { it as ActivityOptions }
+            val bundle = activityOptions?.toBundle()
             val callingPackage =
                 XposedHelpers.getObjectField(activityRecord, "launchedFromPackage")?.let {
                     it as String
