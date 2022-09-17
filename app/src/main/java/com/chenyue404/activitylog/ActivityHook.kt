@@ -84,15 +84,13 @@ class ActivityHook : IXposedHookLoadPackage {
                     hookStartActivityUnchecked()
                 )
             }
-        } else if (osVersion <= 30) {
+        } else {
             val className = if (osVersion == 28) {
                 "com.android.server.am.ActivityStarter"
             } else {
                 "com.android.server.wm.ActivityStarter"
             }
             hookExecute(className, classLoader)
-        } else {
-            log("暂不支持这个版本的Android")
         }
     }
 
@@ -199,6 +197,7 @@ class ActivityHook : IXposedHookLoadPackage {
                     val intent: Intent = param.args[0] as Intent
                     if (intent.action == LogReceiver.action) {
                         param.args[4] = true
+                        param.result = true
                     }
                 }
             }
