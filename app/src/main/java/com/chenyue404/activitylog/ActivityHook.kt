@@ -3,10 +3,15 @@ package com.chenyue404.activitylog
 import android.app.ActivityOptions
 import android.app.AndroidAppHelper
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
-import de.robv.android.xposed.*
+import de.robv.android.xposed.IXposedHookLoadPackage
+import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.XSharedPreferences
+import de.robv.android.xposed.XposedBridge
+import de.robv.android.xposed.XposedHelpers.*
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 
 class ActivityHook : IXposedHookLoadPackage {
@@ -19,6 +24,11 @@ class ActivityHook : IXposedHookLoadPackage {
         const val SWITCH_TRUE = "true"
         const val SWITCH_FALSE = "false"
         var hookSwitch = SWITCH_NULL
+
+        private val xSharedPreferences = XSharedPreferences(
+            BuildConfig.APPLICATION_ID,
+            PREF_NAME
+        )
     }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
@@ -31,140 +41,36 @@ class ActivityHook : IXposedHookLoadPackage {
         hookCheckBroadcastFromSystem(classLoader)
 
         val osVersion = Build.VERSION.SDK_INT
-        log("osVersion=$osVersion")
-        if (osVersion <= 27) {
-            val activityRecordClass =
-                XposedHelpers.findClass(
+        val activityRecordHook = getActivityRecordHook(osVersion)
+        when {
+            osVersion < Build.VERSION_CODES.Q -> {
+                findAndHookConstructor(
                     "com.android.server.am.ActivityRecord",
-                    classLoader
-                )
-            val iVoiceInteractionSessionClass =
-                XposedHelpers.findClass(
-                    "android.service.voice.IVoiceInteractionSession",
-                    classLoader
-                )
-            val iVoiceInteractorClass =
-                XposedHelpers.findClass(
-                    "com.android.internal.app.IVoiceInteractor",
-                    classLoader
-                )
-            val taskRecordClass =
-                XposedHelpers.findClass("com.android.server.am.TaskRecord", classLoader)
-            if (osVersion < 26) {
-                //24,25
-                XposedHelpers.findAndHookMethod(
-                    "com.android.server.am.ActivityStarter",
                     classLoader,
-                    "startActivityUnchecked",
-                    activityRecordClass,
-                    activityRecordClass,
-                    iVoiceInteractionSessionClass,
-                    iVoiceInteractorClass,
-                    Int::class.java,
-                    Boolean::class.java,
-                    ActivityOptions::class.java,
-                    taskRecordClass,
-                    hookStartActivityUnchecked()
-                )
-            } else {
-                //26,27
-                XposedHelpers.findAndHookMethod(
-                    "com.android.server.am.ActivityStarter",
-                    classLoader,
-                    "startActivityUnchecked",
-                    activityRecordClass,
-                    activityRecordClass,
-                    iVoiceInteractionSessionClass,
-                    iVoiceInteractorClass,
-                    Int::class.java,
-                    Boolean::class.java,
-                    ActivityOptions::class.java,
-                    taskRecordClass,
-                    "[Lcom.android.server.am.ActivityRecord;",
-                    hookStartActivityUnchecked()
+                    activityRecordHook
                 )
             }
-        } else {
-            val className = if (osVersion == 28) {
-                "com.android.server.am.ActivityStarter"
-            } else {
-                "com.android.server.wm.ActivityStarter"
+            osVersion < Build.VERSION_CODES.S -> {
+                findAndHookConstructor(
+                    "com.android.server.wm.ActivityRecord",
+                    classLoader,
+                    activityRecordHook
+                )
             }
-            hookExecute(className, classLoader)
+            else -> {
+                findAndHookMethod(
+                    "com.android.server.wm.ActivityRecord.Builder",
+                    classLoader,
+                    "build",
+                    activityRecordHook
+                )
+            }
         }
+
     }
 
     private fun log(str: String) {
         XposedBridge.log("$TAG-$str")
-    }
-
-    private fun hookExecute(className: String, classLoader: ClassLoader) {
-        XposedHelpers.findAndHookMethod(
-            className, classLoader, "execute",
-            object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    log("hookExecute")
-                    if (hookSwitch == SWITCH_NULL && readHookSwitchIsFalse()) return
-
-                    val request = XposedHelpers.getObjectField(param.thisObject, "mRequest")
-                    val intent = XposedHelpers.getObjectField(request, "intent") as Intent
-                    intent.component?.let {
-                        if (it.toString().contains(BuildConfig.APPLICATION_ID)
-                            && readHookSwitchIsFalse()
-                        ) return
-                    }
-                    if (hookSwitch == SWITCH_FALSE) return
-                    val callingPackage =
-                        XposedHelpers.getObjectField(request, "callingPackage")?.let {
-                            it as String
-                        } ?: ""
-                    val safeActivityOptions =
-                        XposedHelpers.getObjectField(request, "activityOptions")
-                    var bundle: Bundle? = null
-                    safeActivityOptions?.run {
-                        val activityOptions =
-                            XposedHelpers.getObjectField(
-                                safeActivityOptions,
-                                "mOriginalOptions"
-                            )
-                        activityOptions?.let {
-                            bundle = XposedHelpers.callMethod(it, "toBundle") as Bundle
-                        }
-                    }
-                    val str = intent.transToStr(callingPackage, bundle)
-                    log("\n$str")
-                    sendBroadcast(str)
-                }
-            }
-        )
-    }
-
-    private fun hookStartActivityUnchecked() = object : XC_MethodHook() {
-        override fun afterHookedMethod(param: MethodHookParam) {
-            log("hookStartActivityUnchecked")
-            if (hookSwitch == SWITCH_NULL && readHookSwitchIsFalse()) return
-
-            val activityRecord = param.args[0]
-            val intent = XposedHelpers.getObjectField(activityRecord, "intent")?.let {
-                it as Intent
-            } ?: return
-            intent.component?.let {
-                if (it.toString().contains(BuildConfig.APPLICATION_ID)
-                    && readHookSwitchIsFalse()
-                ) return
-            }
-            if (hookSwitch == SWITCH_FALSE) return
-
-            val activityOptions = param.args[6]?.let { it as ActivityOptions }
-            val bundle = activityOptions?.toBundle()
-            val callingPackage =
-                XposedHelpers.getObjectField(activityRecord, "launchedFromPackage")?.let {
-                    it as String
-                } ?: ""
-            val str = intent.transToStr(callingPackage, bundle)
-            log("\n$str")
-            sendBroadcast(str)
-        }
     }
 
     private fun sendBroadcast(str: String) {
@@ -181,9 +87,8 @@ class ActivityHook : IXposedHookLoadPackage {
      * 解除系统不能发自定义广播的限制
      */
     private fun hookCheckBroadcastFromSystem(classLoader: ClassLoader) {
-        val ProcessRecord =
-            XposedHelpers.findClass("com.android.server.am.ProcessRecord", classLoader)
-        XposedHelpers.findAndHookMethod(
+        val ProcessRecord = findClass("com.android.server.am.ProcessRecord", classLoader)
+        findAndHookMethod(
             "com.android.server.am.ActivityManagerService", classLoader,
             "checkBroadcastFromSystem",
             Intent::class.java,
@@ -205,11 +110,83 @@ class ActivityHook : IXposedHookLoadPackage {
     }
 
     private fun readHookSwitchIsFalse(): Boolean {
-        val xSharedPreferences = XSharedPreferences(
-            BuildConfig.APPLICATION_ID,
-            PREF_NAME
-        )
+        xSharedPreferences.reload()
         hookSwitch = xSharedPreferences.getString(KEY_HOOK_SWITCH, SWITCH_TRUE) ?: SWITCH_TRUE
+        log("hookSwitch=$hookSwitch")
         return hookSwitch == SWITCH_FALSE
     }
+
+    private fun getActivityRecordHook(version: Int): XC_MethodHook = object : XC_MethodHook() {
+        override fun afterHookedMethod(param: MethodHookParam) {
+            val intentData = getIntentData(version, param)
+            val intent = intentData.intent
+            if (intentData.needAddFlag) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val intentStr = intent.transToStr(
+                intentData.fromStr,
+                intentData.bundle
+            )
+//            log("intent=$intentStr")
+
+            if (!readHookSwitchIsFalse()) {
+                sendBroadcast(intentStr)
+            }
+        }
+    }
+
+    private fun getIntentData(version: Int, param: XC_MethodHook.MethodHookParam): IntentData {
+        var intentAttrName = ""
+        var optionsAttrName = ""
+        var launchedFromPackageAttrName = ""
+        var requestCodeAttrName = ""
+        var activityInfoAttrName = ""
+        var launchedFromUidAttrName = ""
+
+        if (version >= Build.VERSION_CODES.S) {
+            intentAttrName = "mIntent"
+            optionsAttrName = "mOptions"
+            launchedFromPackageAttrName = "mLaunchedFromPackage"
+            requestCodeAttrName = "mRequestCode"
+            activityInfoAttrName = "mActivityInfo"
+            launchedFromUidAttrName = "mLaunchedFromUid"
+        } else {
+            intentAttrName = "intent"
+            optionsAttrName = "pendingOptions"
+            launchedFromPackageAttrName = "launchedFromPackage"
+            requestCodeAttrName = "requestCode"
+            activityInfoAttrName = "info"
+            launchedFromUidAttrName = "launchedFromUid"
+        }
+
+        val intent = getObjectField(param.thisObject, intentAttrName) as Intent
+        val launchedFromPackage =
+            getObjectField(param.thisObject, launchedFromPackageAttrName) as String?
+        val activityOptions = getObjectField(param.thisObject, optionsAttrName) as ActivityOptions?
+        val requestCode = getIntField(param.thisObject, requestCodeAttrName)
+        val uid = (getObjectField(
+            param.thisObject,
+            activityInfoAttrName
+        ) as ActivityInfo).applicationInfo.uid
+        val launchedFromUid = getIntField(param.thisObject, launchedFromUidAttrName)
+
+        val noNeedAddFlag = requestCode != -1
+                || intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK == Intent.FLAG_ACTIVITY_NEW_TASK
+                || intent.action == null
+                || uid == launchedFromUid
+        val intentData = IntentData(
+            intent,
+            launchedFromPackage ?: "",
+            activityOptions?.toBundle(),
+            !noNeedAddFlag
+        )
+        return intentData
+    }
+
+    private data class IntentData(
+        var intent: Intent,
+        var fromStr: String,
+        var bundle: Bundle?,
+        var needAddFlag: Boolean,
+    )
 }
