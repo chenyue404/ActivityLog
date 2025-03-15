@@ -1,0 +1,12 @@
+com.android.server.am.ActivityStarter
+
+P	startActivityMayWait 673
+P		startActivityLocked 263
+			startActivity 294
+				startActivity 988
+					startActivityUnchecked 1015
+					
+					int startActivityUnchecked(final ActivityRecord r, ActivityRecord sourceRecord,
+            IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
+            int startFlags, boolean doResume, ActivityOptions options, TaskRecord inTask,
+            ActivityRecord[] outActivity)

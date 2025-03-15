@@ -25,17 +25,13 @@ class MainActivity : Activity() {
     private val dataList = arrayListOf<JsonObject>()
     private val listAdapter = LogListAdapter(dataList)
 
-    private lateinit var rvList: RecyclerView
-    private lateinit var btStatus: ImageButton
-    private lateinit var btClear: ImageButton
+    private val rvList: RecyclerView by lazy { findViewById(R.id.rvList) }
+    private val btStatus: ImageButton by lazy { findViewById(R.id.btStatus) }
+    private val btClear: ImageButton by lazy { findViewById(R.id.btClear) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        rvList = findViewById(R.id.rvList)
-        btStatus = findViewById(R.id.btStatus)
-        btClear = findViewById(R.id.btClear)
 
         rvList.adapter = listAdapter
         logReceiver = LogReceiver {
@@ -53,8 +49,8 @@ class MainActivity : Activity() {
             dataList.clear()
             listAdapter.notifyDataSetChanged()
         }
-        var hookStatus = getSP()?.getString(ActivityHook.KEY_HOOK_SWITCH, ActivityHook.SWITCH_TRUE)
-                ?: ActivityHook.SWITCH_TRUE == ActivityHook.SWITCH_TRUE
+        var hookStatus = (getSP()?.getString(ActivityHook.KEY_HOOK_SWITCH, ActivityHook.SWITCH_TRUE)
+            ?: ActivityHook.SWITCH_TRUE) == ActivityHook.SWITCH_TRUE
         Log.e(ActivityHook.TAG, "hookStatus=$hookStatus")
 
         if (hookStatus) btStatus.setImageResource(android.R.drawable.ic_media_pause)
