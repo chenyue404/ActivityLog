@@ -11,7 +11,11 @@ import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XSharedPreferences
 import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.XposedHelpers.*
+import de.robv.android.xposed.XposedHelpers.findAndHookConstructor
+import de.robv.android.xposed.XposedHelpers.findAndHookMethod
+import de.robv.android.xposed.XposedHelpers.findClass
+import de.robv.android.xposed.XposedHelpers.getIntField
+import de.robv.android.xposed.XposedHelpers.getObjectField
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 
 class ActivityHook : IXposedHookLoadPackage {
@@ -50,6 +54,7 @@ class ActivityHook : IXposedHookLoadPackage {
                     activityRecordHook
                 )
             }
+
             osVersion < Build.VERSION_CODES.S -> {
                 findAndHookConstructor(
                     "com.android.server.wm.ActivityRecord",
@@ -57,6 +62,7 @@ class ActivityHook : IXposedHookLoadPackage {
                     activityRecordHook
                 )
             }
+
             else -> {
                 findAndHookMethod(
                     "com.android.server.wm.ActivityRecord.Builder",
@@ -88,8 +94,11 @@ class ActivityHook : IXposedHookLoadPackage {
      */
     private fun hookCheckBroadcastFromSystem(classLoader: ClassLoader) {
         val ProcessRecord = findClass("com.android.server.am.ProcessRecord", classLoader)
+        val hookClassStr =
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.TIRAMISU) "com.android.server.am.BroadcastController"
+            else "com.android.server.am.ActivityManagerService"
         findAndHookMethod(
-            "com.android.server.am.ActivityManagerService", classLoader,
+            hookClassStr, classLoader,
             "checkBroadcastFromSystem",
             Intent::class.java,
             ProcessRecord,
