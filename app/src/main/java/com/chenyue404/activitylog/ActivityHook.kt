@@ -13,7 +13,6 @@ import de.robv.android.xposed.XSharedPreferences
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers.findAndHookConstructor
 import de.robv.android.xposed.XposedHelpers.findAndHookMethod
-import de.robv.android.xposed.XposedHelpers.findClass
 import de.robv.android.xposed.XposedHelpers.getIntField
 import de.robv.android.xposed.XposedHelpers.getObjectField
 import de.robv.android.xposed.callbacks.XC_LoadPackage
@@ -45,6 +44,7 @@ class ActivityHook : IXposedHookLoadPackage {
         hookCheckBroadcastFromSystem(classLoader)
 
         val osVersion = Build.VERSION.SDK_INT
+        readHookSwitchIsFalse()
         val activityRecordHook = getActivityRecordHook(osVersion)
         when {
             osVersion < Build.VERSION_CODES.Q -> {
@@ -93,7 +93,6 @@ class ActivityHook : IXposedHookLoadPackage {
      * 解除系统不能发自定义广播的限制
      */
     private fun hookCheckBroadcastFromSystem(classLoader: ClassLoader) {
-        val ProcessRecord = findClass("com.android.server.am.ProcessRecord", classLoader)
         val hookClassStr =
             if (Build.VERSION.SDK_INT > Build.VERSION_CODES.TIRAMISU) "com.android.server.am.BroadcastController"
             else "com.android.server.am.ActivityManagerService"
@@ -101,7 +100,7 @@ class ActivityHook : IXposedHookLoadPackage {
             hookClassStr, classLoader,
             "checkBroadcastFromSystem",
             Intent::class.java,
-            ProcessRecord,
+            "com.android.server.am.ProcessRecord",
             String::class.java,
             Int::class.java,
             Boolean::class.java,
@@ -138,7 +137,14 @@ class ActivityHook : IXposedHookLoadPackage {
             )
 //            log("intent=$intentStr")
 
-            if (!readHookSwitchIsFalse()) {
+            if (intentData.fromStr == BuildConfig.APPLICATION_ID
+                && intent.component?.packageName == BuildConfig.APPLICATION_ID
+            ) {
+                readHookSwitchIsFalse()
+                log("afterHook, hookSwitch=$hookSwitch")
+            }
+
+            if (hookSwitch == SWITCH_TRUE) {
                 sendBroadcast(intentStr)
             }
         }
@@ -168,17 +174,13 @@ class ActivityHook : IXposedHookLoadPackage {
             launchedFromUidAttrName = "launchedFromUid"
         }
 
-        val intent = getObjectField(param.thisObject, intentAttrName) as Intent
-        val launchedFromPackage =
-            getObjectField(param.thisObject, launchedFromPackageAttrName) as String?
-        val activityOptions = getObjectField(param.thisObject, optionsAttrName) as ActivityOptions?
-        val requestCode = getIntField(param.thisObject, requestCodeAttrName)
-        val uid = (getObjectField(
-            param.thisObject,
-            activityInfoAttrName
-        ) as ActivityInfo).applicationInfo.uid
-        val launchedFromUid = getIntField(param.thisObject, launchedFromUidAttrName)
-
+        val obj = param.thisObject
+        val intent = getObjectField(obj, intentAttrName) as Intent
+        val launchedFromPackage = getObjectField(obj, launchedFromPackageAttrName) as String?
+        val activityOptions = getObjectField(obj, optionsAttrName) as ActivityOptions?
+        val requestCode = getIntField(obj, requestCodeAttrName)
+        val uid = (getObjectField(obj, activityInfoAttrName) as ActivityInfo).applicationInfo.uid
+        val launchedFromUid = getIntField(obj, launchedFromUidAttrName)
         val noNeedAddFlag = requestCode != -1
                 || intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK == Intent.FLAG_ACTIVITY_NEW_TASK
                 || intent.action == null

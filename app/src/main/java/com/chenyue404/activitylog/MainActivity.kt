@@ -46,20 +46,18 @@ class MainActivity : Activity() {
         })
 
         btClear.setOnClickListener {
+            listAdapter.notifyItemRangeRemoved(0, dataList.size)
             dataList.clear()
-            listAdapter.notifyDataSetChanged()
         }
         var hookStatus = (getSP()?.getString(ActivityHook.KEY_HOOK_SWITCH, ActivityHook.SWITCH_TRUE)
             ?: ActivityHook.SWITCH_TRUE) == ActivityHook.SWITCH_TRUE
-        Log.e(ActivityHook.TAG, "hookStatus=$hookStatus")
+        Log.d(ActivityHook.TAG, "hookStatus=$hookStatus")
 
-        if (hookStatus) btStatus.setImageResource(android.R.drawable.ic_media_pause)
-        else btStatus.setImageResource(android.R.drawable.ic_media_play)
+        updateBtStatus(hookStatus)
 
         btStatus.setOnClickListener {
-            if (hookStatus) btStatus.setImageResource(android.R.drawable.ic_media_play)
-            else btStatus.setImageResource(android.R.drawable.ic_media_pause)
             hookStatus = !hookStatus
+            updateBtStatus(hookStatus)
             getSP()?.edit(true) {
                 putString(
                     ActivityHook.KEY_HOOK_SWITCH,
@@ -68,6 +66,13 @@ class MainActivity : Activity() {
             }
             startActivity(Intent(this, MainActivity::class.java))
         }
+    }
+
+    private fun updateBtStatus(hookStatus: Boolean) {
+        btStatus.setImageResource(
+            if (hookStatus) android.R.drawable.ic_media_pause
+            else android.R.drawable.ic_media_play
+        )
     }
 
     override fun onDestroy() {

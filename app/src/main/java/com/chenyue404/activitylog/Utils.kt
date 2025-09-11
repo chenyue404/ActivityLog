@@ -6,10 +6,7 @@ import android.os.Bundle
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import java.text.SimpleDateFormat
-import java.util.*
-
-class Utils {
-}
+import java.util.Locale
 
 fun Long.timeToStr(): String =
     SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.ROOT).format(this)
@@ -30,31 +27,27 @@ fun Intent.transToStr(from: String = "null", bundle: Bundle? = null): String {
         addProperty("categories", categories?.joinToString() ?: "null")
         extras?.let { bundle ->
             val jsonArray = JsonArray()
-            bundle.keySet().forEach {
-                val value = bundle.get(it)
-                value?.run {
+            bundle.keySet().forEach { key ->
+                bundle.get(key)?.let { value ->
                     jsonArray.add(JsonObject().apply {
-                        addProperty("key", it)
+                        addProperty("key", key)
                         addProperty("value", value.toString())
                         addProperty("class", value.javaClass.name)
                     })
                 }
-
             }
             add("intentExtras", jsonArray)
         }
         bundle?.let { bundle ->
             val jsonArray = JsonArray()
-            bundle.keySet().forEach {
-                val value = bundle.get(it)
-                value?.run {
+            bundle.keySet().forEach { key ->
+                bundle.get(key)?.let { value ->
                     jsonArray.add(JsonObject().apply {
-                        addProperty("key", it)
+                        addProperty("key", key)
                         addProperty("value", value.toString())
                         addProperty("class", value.javaClass.name)
                     })
                 }
-
             }
             add("bundle", jsonArray)
         }
