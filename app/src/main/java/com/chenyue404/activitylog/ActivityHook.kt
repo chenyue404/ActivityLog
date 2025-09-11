@@ -19,20 +19,20 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
 
 class ActivityHook : IXposedHookLoadPackage {
     companion object {
-        private const val HOOK_TARGET_PACKAGENAME = "android"
         const val TAG = "ActivityHook-"
         const val PREF_NAME = "main_prefs"
         const val KEY_HOOK_SWITCH = "key_hook_switch"
-        private const val SWITCH_NULL = "null"
         const val SWITCH_TRUE = "true"
         const val SWITCH_FALSE = "false"
-        var hookSwitch = SWITCH_NULL
 
-        private val xSharedPreferences = XSharedPreferences(
-            BuildConfig.APPLICATION_ID,
-            PREF_NAME
-        )
     }
+
+    private val HOOK_TARGET_PACKAGENAME = "android"
+    private val xSharedPreferences = XSharedPreferences(
+        BuildConfig.APPLICATION_ID,
+        PREF_NAME
+    )
+    private var hookSwitch = SWITCH_FALSE
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         val packageName = lpparam.packageName
@@ -117,11 +117,10 @@ class ActivityHook : IXposedHookLoadPackage {
         )
     }
 
-    private fun readHookSwitchIsFalse(): Boolean {
+    private fun readHookSwitchIsFalse() {
         xSharedPreferences.reload()
-        hookSwitch = xSharedPreferences.getString(KEY_HOOK_SWITCH, SWITCH_TRUE) ?: SWITCH_TRUE
+        hookSwitch = xSharedPreferences.getString(KEY_HOOK_SWITCH, SWITCH_FALSE) ?: SWITCH_FALSE
         log("hookSwitch=$hookSwitch")
-        return hookSwitch == SWITCH_FALSE
     }
 
     private fun getActivityRecordHook(version: Int): XC_MethodHook = object : XC_MethodHook() {
@@ -141,7 +140,6 @@ class ActivityHook : IXposedHookLoadPackage {
                 && intent.component?.packageName == BuildConfig.APPLICATION_ID
             ) {
                 readHookSwitchIsFalse()
-                log("afterHook, hookSwitch=$hookSwitch")
             }
 
             if (hookSwitch == SWITCH_TRUE) {

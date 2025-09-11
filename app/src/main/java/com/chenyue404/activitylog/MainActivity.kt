@@ -49,21 +49,23 @@ class MainActivity : Activity() {
             listAdapter.notifyItemRangeRemoved(0, dataList.size)
             dataList.clear()
         }
-        var hookStatus = (getSP()?.getString(ActivityHook.KEY_HOOK_SWITCH, ActivityHook.SWITCH_TRUE)
-            ?: ActivityHook.SWITCH_TRUE) == ActivityHook.SWITCH_TRUE
+        var hookStatus = getSP()?.getString(
+            ActivityHook.KEY_HOOK_SWITCH,
+            ActivityHook.SWITCH_FALSE
+        ) == ActivityHook.SWITCH_TRUE
         Log.d(ActivityHook.TAG, "hookStatus=$hookStatus")
 
         updateBtStatus(hookStatus)
 
         btStatus.setOnClickListener {
             hookStatus = !hookStatus
-            updateBtStatus(hookStatus)
             getSP()?.edit(true) {
                 putString(
                     ActivityHook.KEY_HOOK_SWITCH,
                     if (hookStatus) ActivityHook.SWITCH_TRUE else ActivityHook.SWITCH_FALSE
                 )
             }
+            updateBtStatus(hookStatus)
             startActivity(Intent(this, MainActivity::class.java))
         }
     }
@@ -133,6 +135,7 @@ class MainActivity : Activity() {
         )
     } catch (e: SecurityException) {
         // The new XSharedPreferences is not enabled or module's not loading
+        Log.e(ActivityHook.TAG, "getSP Failed: $e")
         null // other fallback, if any
     }
 }
